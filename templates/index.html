@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI History Timeline Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>AI Timeline Generator</h1>
+            <p>Discover the history of anything in a beautiful timeline.</p>
+        </header>
+
+        <main>
+            <form method="POST" action="/" class="search-form">
+                <input type="text" name="topic" placeholder="Enter a historical topic (e.g., Roman Empire, Space Race)" value="{{ topic if topic else '' }}" required autocomplete="off">
+                <button type="submit">Generate Timeline</button>
+            </form>
+
+            {% if error %}
+            <div class="error-message">
+                <p>Error: {{ error }}</p>
+            </div>
+            {% endif %}
+
+            {% if timeline_data %}
+            <div class="timeline-container">
+                <h2>Timeline for "{{ topic }}"</h2>
+                <div class="timeline">
+                    {% for item in timeline_data %}
+                    <div class="timeline-item">
+                        <div class="timeline-dot"></div>
+                        <div class="timeline-content"
+                             data-year="{{ item.year }}"
+                             data-desc="{{ item.description }}"
+                             data-detail="{{ item.detailed_info }}"
+                             data-image="{{ item.image_url if item.image_url else '' }}"
+                             onclick="openModal(this)">
+                            {% if item.image_url %}
+                            <div class="timeline-image-container">
+                                <img src="{{ item.image_url }}" alt="{{ item.search_term }}" class="timeline-image">
+                            </div>
+                            {% endif %}
+                            <h3>{{ item.year }}</h3>
+                            <p>{{ item.description }}</p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </main>
+    </div>
+
+    <!-- Modal for Detailed Info -->
+    <div id="infoModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <img id="modalImage" src="" alt="" class="modal-image" style="display: none;">
+            <h2 id="modalYear"></h2>
+            <h3 id="modalDesc"></h3>
+            <p id="modalDetail"></p>
+        </div>
+    </div>
+
+    <script>
+        function openModal(element) {
+            const year = element.getAttribute('data-year');
+            const desc = element.getAttribute('data-desc');
+            const detail = element.getAttribute('data-detail');
+            const image = element.getAttribute('data-image');
+
+            document.getElementById('modalYear').textContent = year;
+            document.getElementById('modalDesc').textContent = desc;
+            document.getElementById('modalDetail').textContent = detail && detail !== 'None' && detail !== 'undefined' ? detail : "No additional details available.";
+            
+            const modalImage = document.getElementById('modalImage');
+            if (image && image !== 'None' && image !== 'undefined') {
+                modalImage.src = image;
+                modalImage.style.display = 'block';
+            } else {
+                modalImage.style.display = 'none';
+            }
+
+            document.getElementById('infoModal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('infoModal').style.display = 'none';
+        }
+
+        window.onclick = function(event) {
+            const modal = document.getElementById('infoModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+    </script>
+</body>
+</html>
