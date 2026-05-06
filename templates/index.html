@@ -8,50 +8,51 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>AI Timeline Generator</h1>
-            <p>Discover the history of anything in a beautiful timeline.</p>
-        </header>
-
-        <main>
-            <form method="POST" action="/" class="search-form">
-                <input type="text" name="topic" placeholder="Enter a historical topic (e.g., Roman Empire, Space Race)" value="{{ topic if topic else '' }}" required autocomplete="off">
-                <button type="submit">Generate Timeline</button>
-            </form>
-
-            {% if error %}
-            <div class="error-message">
-                <p>Error: {{ error }}</p>
+    <div class="app-container">
+        <!-- Sidebar Chat -->
+        <aside class="chat-sidebar">
+            <div class="chat-header">
+                <h1>AI History</h1>
+                <p style="color: #6b7280; font-size: 0.9rem;">Chat & Timeline</p>
             </div>
-            {% endif %}
-
-            {% if timeline_data %}
-            <div class="timeline-container">
-                <h2>Timeline for "{{ topic }}"</h2>
-                <div class="timeline">
-                    {% for item in timeline_data %}
-                    <div class="timeline-item">
-                        <div class="timeline-dot"></div>
-                        <div class="timeline-content"
-                             data-year="{{ item.year }}"
-                             data-desc="{{ item.description }}"
-                             data-detail="{{ item.detailed_info }}"
-                             data-image="{{ item.image_url if item.image_url else '' }}"
-                             onclick="openModal(this)">
-                            {% if item.image_url %}
-                            <div class="timeline-image-container">
-                                <img src="{{ item.image_url }}" alt="{{ item.search_term }}" class="timeline-image">
-                            </div>
-                            {% endif %}
-                            <h3>{{ item.year }}</h3>
-                            <p>{{ item.description }}</p>
-                        </div>
-                    </div>
-                    {% endfor %}
+            <div class="chat-messages" id="chatMessages">
+                <div class="chat-message message-bot">
+                    Hello! I'm your AI History Assistant. Ask me a historical question or tell me a topic you'd like a timeline for (e.g. "Roman Empire").
                 </div>
             </div>
-            {% endif %}
+            <form id="chatForm" class="chat-input-area">
+                <input type="text" id="chatInput" placeholder="Message AI..." required autocomplete="off">
+                <button type="submit" id="sendBtn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+            </form>
+        </aside>
+
+        <!-- Main Timeline Area -->
+        <main class="main-content" id="mainContent">
+            <!-- Welcome Screen shown initially -->
+            <div id="welcomeScreen" class="welcome-screen">
+                <h1 class="welcome-title">AI Timeline Generator</h1>
+                <p class="welcome-subtitle">Discover the history of anything in a beautiful timeline.</p>
+            </div>
+
+            <!-- Timeline Header shown when data is loaded -->
+            <div class="main-content-header" id="timelineHeader" style="display: none;">
+                <h2 id="timelineTopic"></h2>
+            </div>
+            
+            <!-- Evolution Loader -->
+            <div id="evolutionLoader" class="evolution-loader">
+                <div class="evolution-container">
+                    <div class="evolution-icon" id="evoIcon">🐛</div>
+                    <div class="evolution-line"></div>
+                </div>
+                <p style="color: #9ca3af; margin-top: 20px;">Traveling through time...</p>
+            </div>
+
+            <div id="timelineContainer" class="timeline" style="display: none;">
+                <!-- Timeline items injected here -->
+            </div>
         </main>
     </div>
 
@@ -67,6 +68,227 @@
     </div>
 
     <script>
+        const chatForm = document.getElementById('chatForm');
+        const chatInput = document.getElementById('chatInput');
+        const chatMessages = document.getElementById('chatMessages');
+        const sendBtn = document.getElementById('sendBtn');
+        const timelineContainer = document.getElementById('timelineContainer');
+        const timelineTopic = document.getElementById('timelineTopic');
+        const welcomeScreen = document.getElementById('welcomeScreen');
+        const timelineHeader = document.getElementById('timelineHeader');
+        const mainContent = document.getElementById('mainContent');
+        const evolutionLoader = document.getElementById('evolutionLoader');
+        const evolutionStages = ['🐛', '🐒', '🚶', '🚴', '🏍️', '🚗', '✈️'];
+        let evoInterval;
+
+        function startEvolutionAnimation() {
+            welcomeScreen.style.display = 'none';
+            timelineHeader.style.display = 'none';
+            timelineContainer.style.display = 'none';
+            evolutionLoader.style.display = 'flex';
+            mainContent.classList.add('timeline-active');
+            
+            const oldContainer = document.querySelector('.evolution-container');
+            const newContainer = oldContainer.cloneNode(true);
+            oldContainer.parentNode.replaceChild(newContainer, oldContainer);
+            
+            const newEvoIcon = newContainer.querySelector('#evoIcon');
+            
+            let stage = 0;
+            newEvoIcon.textContent = evolutionStages[stage];
+            
+            evoInterval = setInterval(() => {
+                stage++;
+                if (stage < evolutionStages.length) {
+                    newEvoIcon.textContent = evolutionStages[stage];
+                } else {
+                    clearInterval(evoInterval);
+                }
+            }, 715);
+        }
+
+        function stopEvolutionAnimation() {
+            clearInterval(evoInterval);
+            evolutionLoader.style.display = 'none';
+        }
+
+        let chatHistory = [];
+
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const message = chatInput.value.trim();
+            if (!message) return;
+
+            // Add user message to UI
+            appendMessage(message, 'user');
+            chatInput.value = '';
+            chatInput.disabled = true;
+            sendBtn.disabled = true;
+
+            // Add loading spinner
+            const spinner = document.createElement('div');
+            spinner.className = 'loading-spinner';
+            spinner.id = 'chatSpinner';
+            chatMessages.appendChild(spinner);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        history: chatHistory,
+                        message: message
+                    })
+                });
+
+                const data = await response.json();
+                
+                // Remove spinner
+                document.getElementById('chatSpinner')?.remove();
+
+                if (data.error) {
+                    appendMessage("Error: " + data.error, 'bot');
+                    return;
+                }
+
+                // Add to history
+                chatHistory.push({ role: 'user', content: message });
+                
+                if (data.chat_message) {
+                    appendMessage(data.chat_message, 'bot');
+                    chatHistory.push({ role: 'assistant', content: data.chat_message });
+                }
+
+                if (data.timeline && data.timeline.length > 0) {
+                    startEvolutionAnimation();
+                    setTimeout(() => {
+                        stopEvolutionAnimation();
+                        renderTimeline(data.enhanced_topic || "Generated Timeline", data.timeline, data.quiz);
+                    }, 5000);
+                }
+
+            } catch (error) {
+                document.getElementById('chatSpinner')?.remove();
+                appendMessage("Failed to connect to the server.", 'bot');
+                console.error(error);
+            } finally {
+                chatInput.disabled = false;
+                sendBtn.disabled = false;
+                chatInput.focus();
+            }
+        });
+
+        function appendMessage(text, sender) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `chat-message message-${sender}`;
+            msgDiv.textContent = text;
+            chatMessages.appendChild(msgDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function renderTimeline(topic, items, quiz) {
+            // Hide welcome screen, show timeline
+            welcomeScreen.style.display = 'none';
+            timelineHeader.style.display = 'block';
+            timelineContainer.style.display = 'block';
+            mainContent.classList.add('timeline-active');
+
+            timelineTopic.textContent = `Timeline for "${topic}"`;
+            timelineContainer.innerHTML = '';
+
+            items.forEach((item, index) => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'timeline-item';
+                
+                let imageHtml = '';
+                if (item.image_url) {
+                    imageHtml = `<div class="timeline-image-container"><img src="${item.image_url}" alt="${item.search_term || ''}" class="timeline-image"></div>`;
+                }
+
+                itemDiv.innerHTML = `
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content" onclick="openModal(this)"
+                         data-year="${escapeHtml(item.year)}"
+                         data-desc="${escapeHtml(item.description)}"
+                         data-detail="${escapeHtml(item.detailed_info || '')}"
+                         data-image="${escapeHtml(item.image_url || '')}">
+                        ${imageHtml}
+                        <h3>${escapeHtml(item.year)}</h3>
+                        <p>${escapeHtml(item.description)}</p>
+                    </div>
+                `;
+                timelineContainer.appendChild(itemDiv);
+            });
+
+            // Add Quiz Section if available
+            if (quiz && quiz.length > 0) {
+                const quizSection = document.createElement('div');
+                quizSection.className = 'quiz-section';
+                quizSection.innerHTML = '<h3 class="quiz-title">Knowledge Check! 🧠</h3>';
+                
+                quiz.forEach((q, i) => {
+                    const qDiv = document.createElement('div');
+                    qDiv.className = 'quiz-item';
+                    
+                    let optionsHtml = '';
+                    q.options.forEach(option => {
+                        optionsHtml += `<button class="quiz-option" onclick="handleQuizChoice(this, '${escapeHtml(q.correct_answer)}')">${escapeHtml(option)}</button>`;
+                    });
+
+                    qDiv.innerHTML = `
+                        <p class="quiz-question">Q${i+1}: ${escapeHtml(q.question)}</p>
+                        <div class="quiz-options">
+                            ${optionsHtml}
+                        </div>
+                        <p class="quiz-result-text"></p>
+                    `;
+                    quizSection.appendChild(qDiv);
+                });
+                timelineContainer.appendChild(quizSection);
+            }
+        }
+
+        function escapeHtml(unsafe) {
+            if (!unsafe) return '';
+            return unsafe.toString()
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+        }
+
+        function handleQuizChoice(button, correctAnswer) {
+            const container = button.parentElement;
+            const options = container.querySelectorAll('.quiz-option');
+            const resultText = container.nextElementSibling;
+            
+            // Prevent multiple clicks
+            if (container.classList.contains('answered')) return;
+            container.classList.add('answered');
+
+            const isCorrect = button.textContent === correctAnswer;
+            
+            options.forEach(opt => {
+                opt.classList.add('disabled');
+                if (opt.textContent === correctAnswer) {
+                    opt.classList.add('correct');
+                } else if (opt === button && !isCorrect) {
+                    opt.classList.add('wrong');
+                }
+            });
+
+            if (isCorrect) {
+                resultText.textContent = "Correct! Well done! 🎉";
+                resultText.style.color = "#10b981";
+            } else {
+                resultText.textContent = `Not quite! The correct answer was: ${correctAnswer}`;
+                resultText.style.color = "#ef4444";
+            }
+            resultText.classList.add('show');
+        }
+
         function openModal(element) {
             const year = element.getAttribute('data-year');
             const desc = element.getAttribute('data-desc');
@@ -75,10 +297,10 @@
 
             document.getElementById('modalYear').textContent = year;
             document.getElementById('modalDesc').textContent = desc;
-            document.getElementById('modalDetail').textContent = detail && detail !== 'None' && detail !== 'undefined' ? detail : "No additional details available.";
+            document.getElementById('modalDetail').textContent = detail && detail !== 'None' ? detail : "No additional details available.";
             
             const modalImage = document.getElementById('modalImage');
-            if (image && image !== 'None' && image !== 'undefined') {
+            if (image && image !== 'None') {
                 modalImage.src = image;
                 modalImage.style.display = 'block';
             } else {
